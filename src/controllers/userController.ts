@@ -48,7 +48,6 @@ class UserController {
       }
       
       const userId = parseInt(randomUUID().replaceAll('-', ''), 16) % 123456789;
-      console.log(userId);
       const request = new tedious.Request(`insert into bookish.dbo.users values ('${userId}', '${userName}', '${password}')`, err => {
         if (err) {
           console.log(err);

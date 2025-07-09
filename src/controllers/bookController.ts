@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import * as tedious from 'tedious';
 import dotenv from 'dotenv'
 import { Book } from '../entities/book';
+import { randomUUID } from 'crypto';
 
 dotenv.config()
 
@@ -93,11 +94,25 @@ class BookController {
     }
 
     createBook(req: Request, res: Response) {
-        // TODO: implement functionality
-        return res.status(500).json({
-            error: 'server_error',
-            error_description: 'Endpoint not implemented yet.',
+        const {title, author, isbn, amountOwned} = req.query;
+        if (!title || !author || !isbn || !amountOwned) {
+          res.status(400).send('Missing required data to add book');
+          return;
+        }
+        
+        const bookId = parseInt(randomUUID().replaceAll('-', ''), 16) % 123456789;
+        const request = new tedious.Request(`insert into bookish.dbo.books values ('${bookId}', '${author}', '${title}', '${isbn}', '${amountOwned}')`, err => {
+          if (err) {
+            console.log(err);
+            return;
+          } 
         });
+        
+        request.on('requestCompleted', () => {
+          res.status(200).send('Book uploaded successfully');
+        });
+        
+        this.connection.execSql(request);
     }
 }
 
