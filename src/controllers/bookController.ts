@@ -64,11 +64,32 @@ class BookController {
     }
 
     getBook(req: Request, res: Response) {
-        // TODO: implement functionality
-        return res.status(500).json({
-            error: 'server_error',
-            error_description: 'Endpoint not implemented yet.',
+        const request = new tedious.Request('select * from bookish.dbo.books', (err, rowCount) => {
+          if (err) {
+            console.log(err);
+          }
         });
+       
+        let book: Book;
+        
+        request.on('row', columns => {
+          const id = columns.find(elem => elem.metadata.colName === 'BookId')?.value;
+          if (!id || id !== parseInt(req.params.id)) {
+            return;
+          }
+          
+          const row: any = {};
+          columns.forEach(column => {
+            row[column.metadata.colName] = column.value;
+          });
+          book = new Book(row.BookId, row.Title, row.Author, row.ISBN, row.AmountOwned);
+        });
+        
+        request.on('requestCompleted', () => {
+          res.status(200).send(JSON.stringify(book)); 
+        });
+        
+        this.connection.execSql(request);
     }
 
     createBook(req: Request, res: Response) {
