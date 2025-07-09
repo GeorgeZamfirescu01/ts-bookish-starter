@@ -50,7 +50,7 @@ class BookController {
         });
         
         const books = [];
-        
+
         request.on('row', columns => {
           const row: any = {};
           columns.forEach(column => {
@@ -60,6 +60,7 @@ class BookController {
         });
         
         request.on('requestCompleted', () => {
+          books.sort((a: Book, b: Book) => a.BookId.toString().localeCompare(b.BookId.toString()))
           res.status(200).send(JSON.stringify(books)); 
         });
         
