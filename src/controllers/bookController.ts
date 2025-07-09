@@ -43,13 +43,16 @@ class BookController {
     }
     
     getBooks(req: Request, res: Response) {
+        const titleSearch = req.query.titleSearch;
+        const authorSearch = req.query.authorSearch;
+        
         const request = new tedious.Request('select * from bookish.dbo.books', (err, rowCount) => {
           if (err) {
             console.log(err);
           }
         });
         
-        const books = [];
+        let books = [];
 
         request.on('row', columns => {
           const row: any = {};
@@ -61,6 +64,12 @@ class BookController {
         
         request.on('requestCompleted', () => {
           books.sort((a: Book, b: Book) => a.BookId.toString().localeCompare(b.BookId.toString()))
+          if (titleSearch) {
+            books = books.filter((book: Book) => book.Title.indexOf(titleSearch.toString()) !== -1);
+          }
+          if (authorSearch) {
+            books = books.filter((book: Book) => book.Author.indexOf(authorSearch.toString()) !== -1);
+          }
           res.status(200).send(JSON.stringify(books)); 
         });
         
