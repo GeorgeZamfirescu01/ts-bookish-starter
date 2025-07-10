@@ -3,25 +3,14 @@ import * as tedious from 'tedious';
 import dotenv from 'dotenv'
 import { User } from '../entities/user';
 import { randomUUID } from 'crypto';
+import { getConnection } from '../databaseConnection/connection';
+import * as jwt from 'jsonwebtoken';
+import passport from 'passport';
 
 dotenv.config();
 
 class UserController {
     router: Router;
-    sqlConfiguration: tedious.ConnectionConfiguration = {
-      server: 'localhost',
-      options: {
-        trustServerCertificate: true
-      },
-      authentication: {
-        type: 'default',
-        options: {
-          userName: 'GeoZamExtra',
-          password: process.env.SQL_PASSWD,
-          trustServerCertificate: true,
-        }
-      }
-    };
     connection: tedious.Connection;
 
     constructor() {
@@ -29,14 +18,7 @@ class UserController {
         this.router.post('/register', this.postRegister.bind(this));
         this.router.post('/login', this.postLogin.bind(this));
         
-        this.connection = new tedious.Connection(this.sqlConfiguration);
-        this.connection.on('connect', (err) => {
-          if (err) {
-            console.log('Error ', err);
-          }
-        });
-        
-        this.connection.connect();
+        this.connection = getConnection();
     }
 
 
@@ -77,9 +59,8 @@ class UserController {
       
       request.on('row', columns => {
         if (!columns || columns.length === 0) {
-          res.status(401).send('Wrong email or password. Please register if you do not have an account or reset your password ' + 
+          return res.status(401).send('Wrong email or password. Please register if you do not have an account or reset your password ' + 
             'if you have forgotten it');
-          return;
         }
         const passwordColumn = columns.find(elem => elem.metadata.colName === 'PasswordHash')
         if (!passwordColumn || passwordColumn.value !== password) {
@@ -88,7 +69,20 @@ class UserController {
           return;
         }
         
-        res.status(200).send('Login successful');
+        passport.authenticate('local', {session: false}, (err, user, info) => {
+          if (err || !user) {
+            return res.status(400).send('User error or: ' + err);
+          }
+          
+          req.login(user, {session: false}, err => {
+            if (err) {
+              return res.send(err);
+            }
+            
+            const token = jwt.sign(user, process.env.JWT_KEY);
+            return res.status(200).json({user, token});
+          })
+        })(req, res);
       });
       
       this.connection.execSql(request);

@@ -4,42 +4,23 @@ import dotenv from 'dotenv'
 import { Book } from '../entities/book';
 import { randomUUID } from 'crypto';
 import { Borrow } from '../entities/borrow';
+import { getConnection } from '../databaseConnection/connection';
 
 dotenv.config()
 
 class BookController {
     router: Router;
-    sqlConfiguration: tedious.ConnectionConfiguration = {
-      server: 'localhost',
-      options: {
-        trustServerCertificate: true
-      },
-      authentication: {
-        type: 'default',
-        options: {
-          userName: 'GeoZamExtra',
-          password: process.env.SQL_PASSWD,
-          trustServerCertificate: true,
-        }
-      }
-    };
     connection: tedious.Connection;
     
     constructor() {
         this.router = Router();
+        this.router.get('/userBorrows', this.getUserBorrowedBooks.bind(this));
         this.router.get('/borrows', this.getBorrowedBooks.bind(this));
         this.router.get('/', this.getBooks.bind(this));
         this.router.post('/', this.createBook.bind(this));
         this.router.get('/:id', this.getBook.bind(this));
         
-        this.connection = new tedious.Connection(this.sqlConfiguration);
-        this.connection.on('connect', (err) => {
-          if (err) {
-            console.log('Error ', err);
-          }
-        });
-        
-        this.connection.connect();
+        this.connection = getConnection();
     }
     
     getBooks(req: Request, res: Response) {
@@ -127,7 +108,7 @@ class BookController {
         this.connection.execSql(request);
     }
     
-    getBorrowedBooks(req: Request, res: Response) {
+    getUserBorrowedBooks(req: Request, res: Response) {
       // will need to get the username from the jwt later
       const userId = 115125610;
       
@@ -148,13 +129,51 @@ class BookController {
         columns.forEach(column => {
           row[column.metadata.colName] = column.value;
         });
-        console.log(row);
         userBorrows.push(new Borrow(row.BorrowId, userId, row.BookId, row.ReturnDateLimit, row.ActualReturnDate));
       });
       
       request.on('requestCompleted', () => {
-        console.log(userBorrows);
         res.status(200).send(userBorrows); 
+      });
+      
+      this.connection.execSql(request);
+    }
+    
+    getBorrowedBooks(req: Request, res: Response) {
+      const request = new tedious.Request(
+            'select users.UserId, borrows.BorrowId, books.BookId, borrows.ReturnDateLimit, borrows.ActualReturnDate, books.AmountOwned from ' + 
+            'bookish.dbo.users join bookish.dbo.borrows on users.UserId = borrows.UserId ' + 
+            'right join bookish.dbo.books on borrows.BookId = books.BookId ', (err, rowCount) => {
+        if (err) {
+          console.log(err);
+        }
+      });
+      
+      const usersBorrows = [];
+      const bookTotals: Record<string, number> = {};
+      
+      request.on('row', columns => {
+        const row: any = {};
+        columns.forEach(column => {
+          row[column.metadata.colName] = column.value;
+        });
+        usersBorrows.push(new Borrow(row.BorrowId, row.UserId, row.BookId, row.ReturnDateLimit, row.ActualReturnDate));
+        bookTotals[row.BookId] = row.AmountOwned;
+      });
+      
+      request.on('requestCompleted', () => {
+        const booksData = [];
+        for (const [bookId, amountOwned] of Object.entries(bookTotals)) {
+          const borrowed = usersBorrows.filter(elem => elem.BookId.toString() === bookId.toString() && !elem.ActualReturnDate && elem.UserId).
+            map(elem => {return {'UserId': elem.UserId, 'ReturnDateLimit': elem.ReturnDateLimit}});
+          booksData.push({
+            'BookId': bookId,
+            'AmounwOwned': amountOwned,
+            'AmountAvailable': amountOwned - borrowed.length,
+            'DataBorrows': borrowed,
+          });
+        }
+        res.status(200).send(booksData); 
       });
       
       this.connection.execSql(request);
