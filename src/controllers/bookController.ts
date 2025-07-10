@@ -109,8 +109,7 @@ class BookController {
     }
     
     getUserBorrowedBooks(req: Request, res: Response) {
-      // will need to get the username from the jwt later
-      const userId = 115125610;
+      const userId = req.user['userId'];
       
       const request = new tedious.Request(
             'select borrows.BorrowId, books.BookId, borrows.ReturnDateLimit, borrows.ActualReturnDate from ' + 
